@@ -99,16 +99,6 @@ def do_trace(cmd, session, options, kernel, ust):
     current = session + "-" + str(uuid.uuid4())
 
     logging.info("start tracing: " + current)  
-    # Checks and cleanup
-    if (os.path.isdir(out)):
-        if (clear_trace == True):
-            if (dry_run == False):
-                logging.debug("Removing trace: " + out)
-                shutil.rmtree(out)
-            else:
-                logging.debug("Would remove trace: " + out)
-        else:
-            logging.warning("Append to existing trace: " + out)
 
     # Step 1: start session
     try:
@@ -144,10 +134,6 @@ def do_trace(cmd, session, options, kernel, ust):
     # Step 3: start tracing
     cmd_stub([LTTNG, "start"], True)
     
-    if (options.daemon):
-        logging.info("daemon mode")
-        return
-
     # Step 4: run the program under tracing
     # Do not check the return value
     cmd_env = os.environ;
@@ -177,9 +163,6 @@ if __name__=="__main__":
     parser.add_option("-k", "--kernel", dest="kernel", default=False, action="store_true", help="Trace only the kernel")
     parser.add_option("-u", "--ust", dest="ust", default=False, action="store_true", help="Trace only user space")
     parser.add_option("-o", "--output", dest="output", help="Output base directory for traces", metavar="DIR", default=destdir)
-    parser.add_option("-b", "--batch", dest="batch", help="Run and trace all executables from this dir", metavar="DIR")
-    parser.add_option("-d", "--daemon", dest="daemon", default=False, action="store_true", help="Start tracing in background")
-    parser.add_option("-l", "--log", dest="log", metavar="FILE", help="Log file", default=None)
     parser.add_option("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
     parser.add_option("-e", "--enable-event-list", dest="evlist", default=default_evlist, help="White list of events to enable")
     parser.add_option("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
@@ -188,7 +171,6 @@ if __name__=="__main__":
     parser.add_option("-s", "--syscall", dest="syscall", default=False, action="store_true", help="Enable syscall tracing")
     parser.add_option("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
     parser.add_option("--name", dest="name", metavar="NAME", default=None, help="trace output name (default to command name with k/u suffix)")
-    parser.add_option("-c", "--clear", dest="clear_trace", default=False, action="store_true", help="Remove previous trace if exists")
     parser.add_option("-v", "--verbose", dest="verbose", default=False, action="store_true", help="Verbose mode")
 
     (options, args) = parser.parse_args()
@@ -211,49 +193,28 @@ if __name__=="__main__":
         options.ust = True
 
     dry_run = options.dry_run
-    clear_trace = options.clear_trace
     fmt = '%(asctime)s %(levelname)s: %(message)s'
     log_level = logging.DEBUG if options.verbose else logging.INFO
-    if (options.log is not None):
-        logging.basicConfig(filename=options.log, level=log_level, format=fmt)
-    else:
-        logging.basicConfig(level=log_level, format=fmt)
+    logging.basicConfig(level=log_level, format=fmt)
 
     logger = logging.getLogger()
     log_stream = logger.handlers[0].stream
 
-    targets = []
-    if (options.batch is None):
-        target = {"name": "default", "cmd": None}
-        if (args is not None and type(args) is list and len(args) > 0):
-            target["name"] = os.path.basename(args[0])
-            target["cmd"] = args
-        # overide session name
-        if (options.name is not None):
-            target["name"] = options.name
-        targets.append(target)
-    else:
-        # Add all scripts from the directory
-        if (options.daemon):
-            raise RuntimeError("The batch mode is incompatible with daemon mode")
-        for exe in os.listdir(options.batch):
-            file = join(options.batch, exe)
-            if (os.path.isfile(file)):
-                target = {"name":exe, "cmd":[file]}
-                targets.append(target)
+    target = {"name": "default", "cmd": None}
+    if (args is not None and type(args) is list and len(args) > 0):
+        target["name"] = os.path.basename(args[0])
+        target["cmd"] = args
+    # overide session name
+    if (options.name is not None):
+        target["name"] = options.name
 
-    if (len(targets) == 0):
-        print("Error: Nothing to trace!")
-        parser.print_help()
-        sys.exit(1)
     try:
-        for t in targets:
-            if (options.ust and options.kernel):
-                do_trace(t["cmd"], t["name"], options, kernel=True, ust=True)
-            elif (options.kernel):
-                do_trace(t["cmd"], t["name"], options, kernel=True, ust=False)
-            elif (options.ust):
-                do_trace(t["cmd"], t["name"], options, kernel=False, ust=True)
+        if (options.ust and options.kernel):
+            do_trace(target["cmd"], target["name"], options, kernel=True, ust=True)
+        elif (options.kernel):
+            do_trace(target["cmd"], target["name"], options, kernel=True, ust=False)
+        elif (options.ust):
+            do_trace(target["cmd"], target["name"], options, kernel=False, ust=True)
     except Exception as e:
         logging.error(str(e))
         cmd_stub([LTTNG,"destroy", "-a"], False)
