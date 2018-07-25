@@ -212,7 +212,7 @@ def do_trace(cmd, session, options, kernel, ust):
             if (not "sched_switch" in evlist or options.stateless):
                 add_context = True
                 cmd_stub([LTTNG, "add-context", "-k", "-c", "k", "-t", "pid", "-t", "tid", "-t", "procname"], True)
-            if (options.syscall or "syscall" in evlist):
+            if ("syscall" in evlist):
                 evlist.remove("syscall")
                 # do not check the return code, see http://bugs.lttng.org/issues/847
                 cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
@@ -265,7 +265,6 @@ if __name__=="__main__":
     parser.add_option("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
     parser.add_option("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
     parser.add_option("--enable-libc-wrapper", dest="libc_wrapper", default=False, action="store_true", help="Enable UST libc wrapper")
-    parser.add_option("-s", "--syscall", dest="syscall", default=False, action="store_true", help="Enable syscall tracing")
     parser.add_option("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
     parser.add_option("--name", dest="name", metavar="NAME", default=None, help="trace output name (default to command name with k/u suffix)")
     parser.add_option("-v", "--verbose", dest="verbose", default=False, action="store_true", help="Verbose mode")
