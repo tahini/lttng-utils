@@ -16,6 +16,8 @@ from subprocess import CalledProcessError
 import shutil
 import uuid
 import signal
+import yaml
+import traceback
 
 # the lttng command
 LTTNG="lttng"
@@ -32,7 +34,7 @@ trace_running = True
 current = ""
 original_sigint = signal.getsignal(signal.SIGINT)
 
-default_evlist = "default"
+default_profile = "kernel"
 evlist_search_path = [ os.path.join(os.getenv("PWD"), "profiles/"),
                        os.path.join(os.getenv("HOME"), ".lttng-utils/profiles/"),
                        "/usr/local/share/lttng-utils/profiles/",
@@ -52,7 +54,6 @@ def cmd_stub(cmds, check, cmd_env=None, with_shell=False):
         raise Exception("command failed")
 
 def find_event_file(searchpath, name):
-    print(searchpath)
     for dir in searchpath:
         if dir is None:
             continue
@@ -61,20 +62,37 @@ def find_event_file(searchpath, name):
             return evfile
     return None
 
-def load_event_list(name):
-    evs = []
+def merge_event_list(add_to, concat):
+    for ev in concat:
+        if not ev in add_to:
+            add_to.append(ev)
+
+def load_profiles(names):
+    evLists = { "kernel": [], "ust": [] }
+    for name in names:
+        profile = load_profile(name)
+        merge_event_list(evLists["kernel"], profile["kernel"])
+        merge_event_list(evLists["ust"], profile["ust"])
+    return evLists
+
+def load_profile(name):
     evfile = name
     if (not os.path.exists(name)):
-        evfile = find_event_file(evlist_search_path, name + ".list")
+        evfile = find_event_file(evlist_search_path, name + ".profile")
     if (evfile is None):
-        logging.warning("event list " + name + " not found")
-        return evs
-    logging.info("using event list " + evfile)
-    f = open(evfile)
-    orig = f.readlines();
-    for ev in orig:
-        evs.append(ev.strip())
-    return evs
+        logging.warning("tracing profile " + name + " not found")
+        return None
+    profile = yaml.load(open(evfile))
+    if "ust" not in profile:
+        profile["ust"] = []
+    if "kernel" not in profile:
+        profile["kernel"] = []
+    if "includes" in profile:
+        # load and merge the included profiles
+        subLists = load_profiles(profile["includes"])
+        merge_event_list(profile["kernel"], subLists["kernel"])
+        merge_event_list(profile["ust"], subLists["ust"])
+    return profile
 
 def get_profiles(searchpath):
     profiles = {}
@@ -83,10 +101,12 @@ def get_profiles(searchpath):
             continue
         for dirname, dirnames, filenames in os.walk(dir):
             for filename in filenames:
-                if (filename.endswith(".list")):
-                    profile = re.sub('\.list$', '', filename)
-                    if not profiles.has_key(profile):
-                        profiles[profile] = dirname
+                if (filename.endswith(".profile")):
+                    profile_name = re.sub('\.profile$', '', filename)
+                    if profile_name not in profiles:
+                        profile = yaml.load(open(dirname + filename))
+                        if (profile is not None):
+                            profiles[profile_name] = profile
     return profiles
 
 def check_sessiond():
@@ -156,24 +176,33 @@ def do_trace(cmd, session, options, kernel, ust):
 
     # Step 2: enable required events
     add_context = False
-    if (kernel):
+    profile = load_profiles(options.selected_profile.split(","))
+    if (kernel and profile["kernel"]):
         cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "16384", "--num-subbuf", "4096"], True)
-        evlist = load_event_list(options.evlist)
+        evlist = profile["kernel"]
+        print("ev list: " + ", ".join(evlist))
         # enable pid/tid context if there is no sched_switch event
-        if (not "sched_switch" in evlist or options.stateless):
-            add_context = True
-            cmd_stub([LTTNG, "add-context", "-k", "-c", "k", "-t", "pid", "-t", "tid", "-t", "procname"], True)
-        if (options.syscall):
-            # do not check the return code, see http://bugs.lttng.org/issues/847
-            cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
-        if (options.evlist is None or options.enable_all_events):
+        if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k"], True)
         else:
-            for ev in evlist:
-                cmd_stub([LTTNG, "enable-event", "-k", "-c", "k", ev], True)
-    if (ust):
+            if (not "sched_switch" in evlist or options.stateless):
+                add_context = True
+                cmd_stub([LTTNG, "add-context", "-k", "-c", "k", "-t", "pid", "-t", "tid", "-t", "procname"], True)
+            if (options.syscall or "syscall" in evlist):
+                evlist.remove("syscall")
+                # do not check the return code, see http://bugs.lttng.org/issues/847
+                cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
+            else:
+                if profile["kernel"]:
+                    cmd_stub([LTTNG, "enable-event", "-k", "-c", "k", ",".join(evlist)], True)
+    if (ust or profile["ust"]):
         cmd_stub([LTTNG, "enable-channel", "u", "-u", "--subbuf-size", "4194304", "--num-subbuf", "64"], True)
-        cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
+        if (options.enable_all_events):
+            cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
+        else:
+            if profile["ust"]:
+                cmd_stub([LTTNG, "enable-event", "-u", "-c", "u", ",".join(profile["ust"])], True)
+        # enable pid/tid context if there is no sched_switch event
         if not kernel or add_context:
             cmd_stub([LTTNG, "add-context", "-c", "u", "-u", "-t", "vpid", "-t", "vtid"], True)
 
@@ -208,9 +237,9 @@ if __name__=="__main__":
     parser.add_option("-u", "--ust", dest="ust", default=False, action="store_true", help="Trace only user space")
     parser.add_option("-o", "--output", dest="output", help="Output base directory for traces", metavar="DIR", default=destdir)
     parser.add_option("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
-    parser.add_option("-e", "--enable-event-list", dest="evlist", default=default_evlist, help="White list of events to enable")
+    parser.add_option("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Default: kernel")
     parser.add_option("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
-    parser.add_option("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events")
+    parser.add_option("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
     parser.add_option("--enable-libc-wrapper", dest="libc_wrapper", default=False, action="store_true", help="Enable UST libc wrapper")
     parser.add_option("-s", "--syscall", dest="syscall", default=False, action="store_true", help="Enable syscall tracing")
     parser.add_option("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
@@ -222,8 +251,18 @@ if __name__=="__main__":
     if (options.list_profiles):
         profiles = get_profiles(evlist_search_path)
         print("Available profiles:")
+        print("")
         for p in profiles.keys():
-            print(p)
+            try:
+                profile = profiles[p]
+                desc = ""
+                if "desc" in profile:
+                    desc = profile["desc"]
+                print('{:<7}{:<15}{:<25}'.format("", p, desc))
+                if "includes" in profile:
+                    print('{:<7}{:<15}{:<25}'.format("", "", "Includes profiles: " + ", ".join(profile["includes"])))
+            except Exception as e:
+                print("Error handling profile '" + p + "'")
         sys.exit(0)
 
     # try to create base directory if it doesn't exists
@@ -266,6 +305,8 @@ if __name__=="__main__":
             do_trace(target["cmd"], target["name"], options, kernel=False, ust=True)
     except Exception as e:
         logging.error(str(e))
+        tb = traceback.format_exc()
+        print(tb)
         cmd_stub([LTTNG,"destroy", "-a"], False)
     else:
         logging.debug("done")
