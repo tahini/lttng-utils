@@ -15,6 +15,7 @@ import string
 from subprocess import CalledProcessError
 import shutil
 import uuid
+import signal
 
 # the lttng command
 LTTNG="lttng"
@@ -27,8 +28,9 @@ the trace is indicated by appending a suffix to the trace output directory."""
 
 dry_run = False
 log_stream = sys.stdout
-clear_trace = False
+trace_running = True
 current = ""
+original_sigint = signal.getsignal(signal.SIGINT)
 
 default_evlist = "default"
 evlist_search_path = [ os.path.join(os.getenv("PWD"), "profiles/"),
@@ -87,6 +89,30 @@ def get_profiles(searchpath):
                         profiles[profile] = dirname
     return profiles
 
+def stop_running_trace(signum, frame):
+    # Signal the tracing is to be stopped
+    global trace_running
+    trace_running = False
+
+    # restore the original signal handler
+    global original_sigint
+    signal.signal(signal.SIGINT, original_sigint)
+
+def wait_for_trace_interruption():
+    global trace_running
+    
+    # Wait for ctrl-c to stop the trace
+    signal.signal(signal.SIGINT, stop_running_trace)
+    print("The trace is now recording, press ctrl+c to stop it")
+    while trace_running:
+        print(".", end='', flush=True)
+        time.sleep(1)
+
+def stop_tracing(current_session):
+    cmd_stub([LTTNG,"stop"], False)
+    cmd_stub([LTTNG,"destroy", current_session], False)
+    logging.info("done tracing: " + current_session)
+
 def do_trace(cmd, session, options, kernel, ust):
     if (not (kernel or ust)):
         return
@@ -141,17 +167,15 @@ def do_trace(cmd, session, options, kernel, ust):
         cmd_env = os.environ.copy()
         cmd_env["LD_PRELOAD"] = "liblttng-ust-libc-wrapper.so"
 
-    # surround cmd with sleep to get a better execution window
+    # execute the command or wait for interruption
     if (cmd is not None):
-        time.sleep(0.1)
         logging.info("Executing command: " + " ".join(cmd))
         cmd_stub(cmd, False, cmd_env)
-    time.sleep(0.1)
+    else:
+        wait_for_trace_interruption()
     
     # Step 5: tear down
-    cmd_stub([LTTNG,"stop"], False)
-    cmd_stub([LTTNG,"destroy", current], False)
-    logging.info("done tracing: " + current)
+    stop_tracing(current)
 
 if __name__=="__main__":
     # default directory for traces
