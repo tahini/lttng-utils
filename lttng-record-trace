@@ -89,6 +89,26 @@ def get_profiles(searchpath):
                         profiles[profile] = dirname
     return profiles
 
+def check_sessiond():
+    retcode = subprocess.call([LTTNG, "list"], stdout=open(os.devnull, 'wb'), stderr=open(os.devnull, 'wb'))
+    logging.debug("exit: " + str(retcode))
+    if (retcode != 0):
+        print("\x1b[1m\x1b[31mThe LTTNG session daemon is not running\x1b[0m")
+        print("")
+        print("It's preferable to run the session daemon as \x1b[1mroot\x1b[0m, as it is required to do \x1b[1mkernel tracing \x1b[0m, and for \x1b[1msome functionnalities of userspace tracing\x1b[0m. You can execute the following command:")
+        print("")
+        print("$ sudo systemctl start lttng-sessiond")
+        print("")
+        print("or")
+        print("")
+        print("$ sudo lttng-sessiond -d")
+        print("")
+        print("To trace \x1b[1monly userspace applications\x1b[0m, you can simply run")
+        print("")
+        print("$ lttng-sessiond -d")
+        return False
+    return True
+
 def stop_running_trace(signum, frame):
     # Signal the tracing is to be stopped
     global trace_running
@@ -100,7 +120,7 @@ def stop_running_trace(signum, frame):
 
 def wait_for_trace_interruption():
     global trace_running
-    
+
     # Wait for ctrl-c to stop the trace
     signal.signal(signal.SIGINT, stop_running_trace)
     print("The trace is now recording, press ctrl+c to stop it")
@@ -124,7 +144,7 @@ def do_trace(cmd, session, options, kernel, ust):
     # generate random uuid
     current = session + "-" + str(uuid.uuid4())
 
-    logging.info("start tracing: " + current)  
+    logging.info("start tracing: " + current)
 
     # Step 1: start session
     try:
@@ -133,7 +153,7 @@ def do_trace(cmd, session, options, kernel, ust):
         # if it fails, it may be stalled, try again, but make failure fatal
         cmd_stub([LTTNG, "destroy", current], False)
         cmd_stub([LTTNG, "create", current, "-o", out], True)
-    
+
     # Step 2: enable required events
     add_context = False
     if (kernel):
@@ -156,10 +176,10 @@ def do_trace(cmd, session, options, kernel, ust):
         cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
         if not kernel or add_context:
             cmd_stub([LTTNG, "add-context", "-c", "u", "-u", "-t", "vpid", "-t", "vtid"], True)
-    
+
     # Step 3: start tracing
     cmd_stub([LTTNG, "start"], True)
-    
+
     # Step 4: run the program under tracing
     # Do not check the return value
     cmd_env = os.environ;
@@ -173,7 +193,7 @@ def do_trace(cmd, session, options, kernel, ust):
         cmd_stub(cmd, False, cmd_env)
     else:
         wait_for_trace_interruption()
-    
+
     # Step 5: tear down
     stop_tracing(current)
 
@@ -220,6 +240,11 @@ if __name__=="__main__":
     fmt = '%(asctime)s %(levelname)s: %(message)s'
     log_level = logging.DEBUG if options.verbose else logging.INFO
     logging.basicConfig(level=log_level, format=fmt)
+
+    if (dry_run == False):
+        # Check that a session daemon is running
+        if (check_sessiond() == False):
+            sys.exit(1)
 
     logger = logging.getLogger()
     log_stream = logger.handlers[0].stream
