@@ -72,6 +72,9 @@ def cmd_stub(cmds, check, cmd_env=None, with_shell=False):
     if (dry_run == False):
         retcode = subprocess.call(cmds, stdout=log_stream, stderr=log_stream, env=cmd_env)
         logging.debug("exit: " + str(retcode))
+    else:
+        print(" ".join(cmds))
+        print("")
     if (check and retcode != 0):
         cmd_stub([LTTNG,"destroy", current], False)
         raise Exception("command failed")
@@ -251,20 +254,20 @@ def do_trace(cmd, session, options):
             # enable pid/tid context if there is no sched_switch event
             if (not "sched_switch" in evlist or options.stateless):
                 add_context = True
-                cmd_stub([LTTNG, "add-context", "-k", "-c", "k", "-t", "pid", "-t", "tid", "-t", "procname"], True)
+                cmd_stub([LTTNG, "add-context", "-c", "k", "-k", "-t", "pid", "-t", "tid", "-t", "procname"], True)
             if ("syscall" in evlist):
                 evlist.remove("syscall")
                 # do not check the return code, see http://bugs.lttng.org/issues/847
                 cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
             if profile["kernel"]:
-                cmd_stub([LTTNG, "enable-event", "-k", "-c", "k", ",".join(evlist)], True)
+                cmd_stub([LTTNG, "enable-event", "-c", "k", "-k", ",".join(evlist)], True)
     if (profile["ust"] or options.enable_all_events):
         cmd_stub([LTTNG, "enable-channel", "u", "-u", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
         if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
         else:
             logging.info("userspace event list: " + ", ".join(profile["ust"]))
-            cmd_stub([LTTNG, "enable-event", "-u", "-c", "u", ",".join(profile["ust"])], True)
+            cmd_stub([LTTNG, "enable-event", "-c", "u", "-u", ",".join(profile["ust"])], True)
         # enable pid/tid context if there is no sched_switch event
         if not profile["kernel"] or add_context:
             cmd_stub([LTTNG, "add-context", "-c", "u", "-u", "-t", "vpid", "-t", "vtid"], True)
@@ -307,7 +310,7 @@ if __name__=="__main__":
     parser.add_argument("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
     parser.add_argument("--list-profile", dest="list_profile", help="Get details on this profile")
     parser.add_argument("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
-    parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
+    parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Outputs the commands without executing them. The output can be copied to a script and run")
     parser.add_argument("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
     parser.add_argument("--name", dest="name", metavar="NAME", default=None, help="trace output name (default to command name with k/u suffix)")
     parser.add_argument('--verbose', '-v', action='count', dest="verbose", help="Verbose mode. The number of -v will increase verbosity of logging.")
