@@ -27,7 +27,7 @@
 # kernel tracing is enabled only if the user has appropriate rights
 # the basename of the command will be used as the directory if none is provided
 
-from optparse import OptionParser
+import argparse
 import os
 import sys
 import re
@@ -46,9 +46,7 @@ import traceback
 # the lttng command
 LTTNG="lttng"
 
-usage = """usage: %prog [options] -- [command]
-
-Run command under tracing. If no kernel or ust option is provided,
+description="""Run command under tracing. If no kernel or ust option is provided,
 then trace command under kernel, ust and both tracers enabled. The type of
 the trace is indicated by appending a suffix to the trace output directory."""
 
@@ -216,11 +214,9 @@ def do_trace(cmd, session, options, kernel, ust):
                 evlist.remove("syscall")
                 # do not check the return code, see http://bugs.lttng.org/issues/847
                 cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
-            else:
-                if profile["kernel"]:
-                    cmd_stub([LTTNG, "enable-event", "-k", "-c", "k", ",".join(evlist)], True)
+            if profile["kernel"]:
+                cmd_stub([LTTNG, "enable-event", "-k", "-c", "k", ",".join(evlist)], True)
     if (ust or profile["ust"]):
-        cmd_stub([LTTNG, "enable-channel", "u", "-u", "--subbuf-size", "4194304", "--num-subbuf", "64"], True)
         if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
         else:
@@ -256,20 +252,21 @@ if __name__=="__main__":
     if destdir is None:
         destdir = os.getcwd()
 
-    parser = OptionParser(usage=usage)
-    parser.add_option("-k", "--kernel", dest="kernel", default=False, action="store_true", help="Trace only the kernel")
-    parser.add_option("-u", "--ust", dest="ust", default=False, action="store_true", help="Trace only user space")
-    parser.add_option("-o", "--output", dest="output", help="Output base directory for traces", metavar="DIR", default=destdir)
-    parser.add_option("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
-    parser.add_option("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Default: kernel")
-    parser.add_option("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
-    parser.add_option("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
-    parser.add_option("--enable-libc-wrapper", dest="libc_wrapper", default=False, action="store_true", help="Enable UST libc wrapper")
-    parser.add_option("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
-    parser.add_option("--name", dest="name", metavar="NAME", default=None, help="trace output name (default to command name with k/u suffix)")
-    parser.add_option("-v", "--verbose", dest="verbose", default=False, action="store_true", help="Verbose mode")
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("-k", "--kernel", dest="kernel", default=False, action="store_true", help="Trace only the kernel")
+    parser.add_argument("-u", "--ust", dest="ust", default=False, action="store_true", help="Trace only user space")
+    parser.add_argument("-o", "--output", dest="output", help="Output base directory for traces", metavar="DIR", default=destdir)
+    parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
+    parser.add_argument("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Default: kernel")
+    parser.add_argument("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
+    parser.add_argument("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
+    parser.add_argument("--enable-libc-wrapper", dest="libc_wrapper", default=False, action="store_true", help="Enable UST libc wrapper")
+    parser.add_argument("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
+    parser.add_argument("--name", dest="name", metavar="NAME", default=None, help="trace output name (default to command name with k/u suffix)")
+    parser.add_argument('--verbose', '-v', action='count', dest="verbose", help="Verbose mode. The number of -v will increase verbosity of logging.")
+    parser.add_argument('command', nargs=argparse.REMAINDER, help="The command to trace. It will be executed after the trace has started and the trace will terminate after its execution.")
 
-    (options, args) = parser.parse_args()
+    options = parser.parse_args()
 
     if (options.list_profiles):
         profiles = get_profiles(evlist_search_path)
@@ -300,6 +297,12 @@ if __name__=="__main__":
 
     dry_run = options.dry_run
     fmt = '%(asctime)s %(levelname)s: %(message)s'
+    log_level = {
+        1: logging.WARNING,
+        2: logging.INFO,
+        3: logging.DEBUG
+    }.get(options.verbose, logging.DEBUG)
+    log_level = log_level if options.verbose else logging.ERROR
     log_level = logging.DEBUG if options.verbose else logging.INFO
     logging.basicConfig(level=log_level, format=fmt)
 
@@ -311,10 +314,11 @@ if __name__=="__main__":
     logger = logging.getLogger()
     log_stream = logger.handlers[0].stream
 
+    command = options.command
     target = {"name": "default", "cmd": None}
-    if (args is not None and type(args) is list and len(args) > 0):
-        target["name"] = os.path.basename(args[0])
-        target["cmd"] = args
+    if (command is not None and type(command) is list and len(command) > 0):
+        target["name"] = os.path.basename(command[0])
+        target["cmd"] = command
     # overide session name
     if (options.name is not None):
         target["name"] = options.name
