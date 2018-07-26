@@ -46,9 +46,10 @@ import datetime
 # the lttng command
 LTTNG="lttng"
 
-description="""Run command under tracing. If no kernel or ust option is provided,
-then trace command under kernel, ust and both tracers enabled. The type of
-the trace is indicated by appending a suffix to the trace output directory."""
+description="""LTTng tracing helper script. It will enable the proper events,
+from kernel or ust domain depending on the selected profile. It either starts
+a tracing session until the user decides to stop it or trace only the command
+at the end of the command line."""
 
 dry_run = False
 log_stream = sys.stdout
@@ -175,12 +176,15 @@ def stop_tracing(current_session):
     cmd_stub([LTTNG,"destroy", current_session], False)
     logging.info("done tracing: " + current_session)
 
-def do_trace(cmd, session, options, kernel, ust):
-    if (not (kernel or ust)):
+def do_trace(cmd, session, options):
+    # Load the profile to determine whether to trace kernel or ust
+    profile = load_profiles(options.selected_profile.split(","))
+    if (not profile["kernel"] and not profile["ust"] and not options.enable_all_events):
+        logging.error("Nothing to trace!")
         return
-    if (kernel):
+    if (profile["kernel"]):
         session += "-k"
-    if (ust):
+    if (profile["ust"]):
         session += "-u"
     session += "-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     out = join(options.output, session)
@@ -199,15 +203,14 @@ def do_trace(cmd, session, options, kernel, ust):
 
     # Step 2: enable required events
     add_context = False
-    profile = load_profiles(options.selected_profile.split(","))
-    if (kernel and profile["kernel"]):
-        cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "16384", "--num-subbuf", "4096"], True)
-        evlist = profile["kernel"]
-        print("ev list: " + ", ".join(evlist))
+    if (profile["kernel"]):
+        cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
         # enable pid/tid context if there is no sched_switch event
         if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k"], True)
         else:
+            evlist = profile["kernel"]
+            logging.info("kernel event list: " + ", ".join(evlist))
             if (not "sched_switch" in evlist or options.stateless):
                 add_context = True
                 cmd_stub([LTTNG, "add-context", "-k", "-c", "k", "-t", "pid", "-t", "tid", "-t", "procname"], True)
@@ -217,12 +220,13 @@ def do_trace(cmd, session, options, kernel, ust):
                 cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
             if profile["kernel"]:
                 cmd_stub([LTTNG, "enable-event", "-k", "-c", "k", ",".join(evlist)], True)
-    if (ust or profile["ust"]):
+    if (profile["ust"]):
+        cmd_stub([LTTNG, "enable-channel", "u", "-u", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
         if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
         else:
-            if profile["ust"]:
-                cmd_stub([LTTNG, "enable-event", "-u", "-c", "u", ",".join(profile["ust"])], True)
+            logging.info("userspace event list: " + ", ".join(profile["ust"]))
+            cmd_stub([LTTNG, "enable-event", "-u", "-c", "u", ",".join(profile["ust"])], True)
         # enable pid/tid context if there is no sched_switch event
         if not kernel or add_context:
             cmd_stub([LTTNG, "add-context", "-c", "u", "-u", "-t", "vpid", "-t", "vtid"], True)
@@ -254,8 +258,6 @@ if __name__=="__main__":
         destdir = os.getcwd()
 
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("-k", "--kernel", dest="kernel", default=False, action="store_true", help="Trace only the kernel")
-    parser.add_argument("-u", "--ust", dest="ust", default=False, action="store_true", help="Trace only user space")
     parser.add_argument("-o", "--output", dest="output", help="Output base directory for traces", metavar="DIR", default=destdir)
     parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
     parser.add_argument("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Default: kernel")
@@ -290,12 +292,6 @@ if __name__=="__main__":
     if not os.path.exists(options.output):
         os.makedirs(options.output)
 
-    # Consider that if no options for kernel or user space is provided
-    # do the experiment by tracing kernel, ust and both
-    if (not (options.kernel or options.ust)):
-        options.kernel = True
-        options.ust = True
-
     dry_run = options.dry_run
     fmt = '%(asctime)s %(levelname)s: %(message)s'
     log_level = {
@@ -324,12 +320,7 @@ if __name__=="__main__":
         target["name"] = options.name
 
     try:
-        if (options.ust and options.kernel):
-            do_trace(target["cmd"], target["name"], options, kernel=True, ust=True)
-        elif (options.kernel):
-            do_trace(target["cmd"], target["name"], options, kernel=True, ust=False)
-        elif (options.ust):
-            do_trace(target["cmd"], target["name"], options, kernel=False, ust=True)
+        do_trace(target["cmd"], target["name"], options)
     except Exception as e:
         logging.error(str(e))
         tb = traceback.format_exc()
