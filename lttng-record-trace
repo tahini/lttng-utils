@@ -216,9 +216,9 @@ def do_trace(cmd, session, options):
     if (not profile["kernel"] and not profile["ust"] and not options.enable_all_events):
         logging.error("Nothing to trace!")
         return
-    if (profile["kernel"]):
+    if (profile["kernel"] or options.enable_all_events):
         session += "-k"
-    if (profile["ust"]):
+    if (profile["ust"] or options.enable_all_events):
         session += "-u"
     session += "-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     out = join(options.output, session)
@@ -237,14 +237,15 @@ def do_trace(cmd, session, options):
 
     # Step 2: enable required events
     add_context = False
-    if (profile["kernel"]):
-        cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
-        # enable pid/tid context if there is no sched_switch event
+    if (profile["kernel"] or options.enable_all_events):
         if (options.enable_all_events):
+            cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "2048K", "--num-subbuf", "8"], True)
             cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k"], True)
         else:
+            cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
             evlist = profile["kernel"]
             logging.info("kernel event list: " + ", ".join(evlist))
+            # enable pid/tid context if there is no sched_switch event
             if (not "sched_switch" in evlist or options.stateless):
                 add_context = True
                 cmd_stub([LTTNG, "add-context", "-k", "-c", "k", "-t", "pid", "-t", "tid", "-t", "procname"], True)
@@ -254,7 +255,7 @@ def do_trace(cmd, session, options):
                 cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
             if profile["kernel"]:
                 cmd_stub([LTTNG, "enable-event", "-k", "-c", "k", ",".join(evlist)], True)
-    if (profile["ust"]):
+    if (profile["ust"] or options.enable_all_events):
         cmd_stub([LTTNG, "enable-channel", "u", "-u", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
         if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
@@ -262,7 +263,7 @@ def do_trace(cmd, session, options):
             logging.info("userspace event list: " + ", ".join(profile["ust"]))
             cmd_stub([LTTNG, "enable-event", "-u", "-c", "u", ",".join(profile["ust"])], True)
         # enable pid/tid context if there is no sched_switch event
-        if not kernel or add_context:
+        if not profile["kernel"] or add_context:
             cmd_stub([LTTNG, "add-context", "-c", "u", "-u", "-t", "vpid", "-t", "vtid"], True)
 
     # Step 3: start tracing
@@ -280,10 +281,16 @@ def do_trace(cmd, session, options):
         logging.info("Executing command: " + " ".join(cmd))
         cmd_stub(cmd, False, cmd_env)
     else:
-        wait_for_trace_interruption()
+        if not options.dry_run:
+            wait_for_trace_interruption()
 
     # Step 5: tear down
     stop_tracing(current)
+
+    # Step 6: Print trace path
+    if not options.dry_run:
+        print("")
+        print("The trace is available at " + out)
 
 if __name__=="__main__":
     # default directory for traces
@@ -293,11 +300,11 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("-o", "--output", dest="output", help="Output base directory for traces", metavar="DIR", default=destdir)
-    parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
     parser.add_argument("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Default: kernel")
     parser.add_argument("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
     parser.add_argument("--list-profile", dest="list_profile", help="Get details on this profile")
     parser.add_argument("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
+    parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
     parser.add_argument("--enable-libc-wrapper", dest="libc_wrapper", default=False, action="store_true", help="Enable UST libc wrapper")
     parser.add_argument("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
     parser.add_argument("--name", dest="name", metavar="NAME", default=None, help="trace output name (default to command name with k/u suffix)")
