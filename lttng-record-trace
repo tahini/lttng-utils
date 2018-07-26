@@ -38,10 +38,10 @@ import logging
 import string
 from subprocess import CalledProcessError
 import shutil
-import uuid
 import signal
 import yaml
 import traceback
+import datetime
 
 # the lttng command
 LTTNG="lttng"
@@ -182,9 +182,10 @@ def do_trace(cmd, session, options, kernel, ust):
         session += "-k"
     if (ust):
         session += "-u"
+    session += "-" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     out = join(options.output, session)
     # generate random uuid
-    current = session + "-" + str(uuid.uuid4())
+    current = session
 
     logging.info("start tracing: " + current)
 
@@ -303,7 +304,6 @@ if __name__=="__main__":
         3: logging.DEBUG
     }.get(options.verbose, logging.DEBUG)
     log_level = log_level if options.verbose else logging.ERROR
-    log_level = logging.DEBUG if options.verbose else logging.INFO
     logging.basicConfig(level=log_level, format=fmt)
 
     if (dry_run == False):
