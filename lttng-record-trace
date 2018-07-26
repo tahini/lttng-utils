@@ -129,8 +129,39 @@ def get_profiles(searchpath):
                     if profile_name not in profiles:
                         profile = yaml.load(open(dirname + filename))
                         if (profile is not None):
+                            profile["file"] = dirname + filename
                             profiles[profile_name] = profile
     return profiles
+
+def print_list(list, text):
+    if list is None:
+        return
+    print('{:<7}{:<15}{:<25}'.format("", text, ""))
+    for l in list:
+        print('{:<7}{:<15}{:<25}'.format("", "", l))
+
+def print_profiles_detail(profiles_to_print):
+    profiles = get_profiles(evlist_search_path)
+    for p in profiles_to_print:
+        if p not in profiles:
+            print("Unknown profile: " + p)
+            print("")
+            continue
+        profile = profiles[p]
+        print("'" + p + "' profile detail:")
+        print('{:<7}{:<15}{:<25}'.format("", "File:", profile["file"]))
+        if "kernel" in profile:
+            print_list(profile["kernel"], "Kernel events:")
+        if "ust" in profile:
+            print_list(profile["ust"], "Userspace events:")
+        if "includes" in profile:
+            print_list(profile["includes"], "Included profiles:")
+            print("")
+            print("===== Included profiles details:")
+            print("")
+            print_profiles_detail(profile["includes"])
+            print("====")
+        print("")
 
 def check_sessiond():
     retcode = subprocess.call([LTTNG, "list"], stdout=open(os.devnull, 'wb'), stderr=open(os.devnull, 'wb'))
@@ -262,6 +293,7 @@ if __name__=="__main__":
     parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
     parser.add_argument("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Default: kernel")
     parser.add_argument("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
+    parser.add_argument("--list-profile", dest="list_profile", help="Get details on this profile")
     parser.add_argument("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
     parser.add_argument("--enable-libc-wrapper", dest="libc_wrapper", default=False, action="store_true", help="Enable UST libc wrapper")
     parser.add_argument("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
@@ -286,6 +318,10 @@ if __name__=="__main__":
                     print('{:<7}{:<15}{:<25}'.format("", "", "Includes profiles: " + ", ".join(profile["includes"])))
             except Exception as e:
                 print("Error handling profile '" + p + "'")
+        sys.exit(0)
+
+    if (options.list_profile):
+        print_profiles_detail(options.list_profile.split(","))
         sys.exit(0)
 
     # try to create base directory if it doesn't exists
