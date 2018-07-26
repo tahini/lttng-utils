@@ -94,6 +94,9 @@ def load_profiles(names):
     evLists = { "kernel": [], "ust": [] }
     for name in names:
         profile = load_profile(name)
+        if profile is None:
+            print("Unknown profile '" + name + "'. You can see the available profiles with ./lttng-record-trace --list-profiles")
+            continue;
         merge_event_list(evLists["kernel"], profile["kernel"])
         merge_event_list(evLists["ust"], profile["ust"])
     return evLists
@@ -304,6 +307,8 @@ if __name__=="__main__":
     options = parser.parse_args()
 
     if (options.list_profiles):
+        print("Profile search paths: " + ", ".join(evlist_search_path))
+        print("")
         profiles = get_profiles(evlist_search_path)
         print("Available profiles:")
         print("")
