@@ -90,17 +90,6 @@ def merge_event_list(add_to, concat):
         if not ev in add_to:
             add_to.append(ev)
 
-def load_profiles(names):
-    evLists = { "kernel": [], "ust": [] }
-    for name in names:
-        profile = load_profile(name)
-        if profile is None:
-            print("Unknown profile '" + name + "'. You can see the available profiles with ./lttng-record-trace --list-profiles")
-            continue;
-        merge_event_list(evLists["kernel"], profile["kernel"])
-        merge_event_list(evLists["ust"], profile["ust"])
-    return evLists
-
 def load_profile(name):
     evfile = name
     if (not os.path.exists(name)):
@@ -113,12 +102,26 @@ def load_profile(name):
         profile["ust"] = []
     if "kernel" not in profile:
         profile["kernel"] = []
+    if "preload" not in profile:
+        profile["preload"] = []
     if "includes" in profile:
         # load and merge the included profiles
         subLists = load_profiles(profile["includes"])
         merge_event_list(profile["kernel"], subLists["kernel"])
         merge_event_list(profile["ust"], subLists["ust"])
     return profile
+
+def load_profiles(names):
+    evLists = { "kernel": [], "ust": [], "preload": [] }
+    for name in names:
+        profile = load_profile(name)
+        if profile is None:
+            print("Unknown profile '" + name + "'. You can see the available profiles with ./lttng-record-trace --list-profiles")
+            continue;
+        merge_event_list(evLists["kernel"], profile["kernel"])
+        merge_event_list(evLists["ust"], profile["ust"])
+        merge_event_list(evLists["preload"], profile["preload"])
+    return evLists
 
 def get_profiles(searchpath):
     profiles = {}
@@ -272,9 +275,9 @@ def do_trace(cmd, session, options):
     # Step 4: run the program under tracing
     # Do not check the return value
     cmd_env = os.environ;
-    if options.libc_wrapper:
+    if profile["preload"]:
         cmd_env = os.environ.copy()
-        cmd_env["LD_PRELOAD"] = "liblttng-ust-libc-wrapper.so"
+        cmd_env["LD_PRELOAD"] = " ".join(profile["preload"])
 
     # execute the command or wait for interruption
     if (cmd is not None):
@@ -290,7 +293,7 @@ def do_trace(cmd, session, options):
     # Step 6: Print trace path
     if not options.dry_run:
         print("")
-        print("The trace is available at " + out)
+        print("The trace is available for analysis at " + out)
 
 if __name__=="__main__":
     # default directory for traces
@@ -305,7 +308,6 @@ if __name__=="__main__":
     parser.add_argument("--list-profile", dest="list_profile", help="Get details on this profile")
     parser.add_argument("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
     parser.add_argument("-n", "--dry-run", dest="dry_run", default=False, action="store_true", help="Do not execute commands")
-    parser.add_argument("--enable-libc-wrapper", dest="libc_wrapper", default=False, action="store_true", help="Enable UST libc wrapper")
     parser.add_argument("--stateless", dest="stateless", default=False, action="store_true", help="Enable pid/tid/procname context for stateless trace processing")
     parser.add_argument("--name", dest="name", metavar="NAME", default=None, help="trace output name (default to command name with k/u suffix)")
     parser.add_argument('--verbose', '-v', action='count', dest="verbose", help="Verbose mode. The number of -v will increase verbosity of logging.")
