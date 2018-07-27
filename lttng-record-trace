@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #
 # The MIT License (MIT)
 #
@@ -42,6 +42,7 @@ import signal
 import yaml
 import traceback
 import datetime
+from lttngprofiles import profile
 
 # the lttng command
 LTTNG="lttng"
@@ -56,6 +57,7 @@ log_stream = sys.stdout
 trace_running = True
 current = ""
 original_sigint = signal.getsignal(signal.SIGINT)
+lttngProfiles = profile.Profile()
 
 default_profile = "kernel"
 evlist_search_path = [ os.path.join(os.getenv("PWD"), "profiles/"),
@@ -78,99 +80,6 @@ def cmd_stub(cmds, check, cmd_env=None, with_shell=False):
     if (check and retcode != 0):
         cmd_stub([LTTNG,"destroy", current], False)
         raise Exception("command failed")
-
-def find_event_file(searchpath, name):
-    for dir in searchpath:
-        if dir is None:
-            continue
-        evfile = os.path.join(dir, name)
-        if os.path.exists(evfile):
-            return evfile
-    return None
-
-def merge_event_list(add_to, concat):
-    for ev in concat:
-        if not ev in add_to:
-            add_to.append(ev)
-
-def load_profile(name):
-    evfile = name
-    if (not os.path.exists(name)):
-        evfile = find_event_file(evlist_search_path, name + ".profile")
-    if (evfile is None):
-        logging.warning("tracing profile " + name + " not found")
-        return None
-    profile = yaml.load(open(evfile))
-    if "ust" not in profile:
-        profile["ust"] = []
-    if "kernel" not in profile:
-        profile["kernel"] = []
-    if "preload" not in profile:
-        profile["preload"] = []
-    if "includes" in profile:
-        # load and merge the included profiles
-        subLists = load_profiles(profile["includes"])
-        merge_event_list(profile["kernel"], subLists["kernel"])
-        merge_event_list(profile["ust"], subLists["ust"])
-    return profile
-
-def load_profiles(names):
-    evLists = { "kernel": [], "ust": [], "preload": [] }
-    for name in names:
-        profile = load_profile(name)
-        if profile is None:
-            print("Unknown profile '" + name + "'. You can see the available profiles with ./lttng-record-trace --list-profiles")
-            continue;
-        merge_event_list(evLists["kernel"], profile["kernel"])
-        merge_event_list(evLists["ust"], profile["ust"])
-        merge_event_list(evLists["preload"], profile["preload"])
-    return evLists
-
-def get_profiles(searchpath):
-    profiles = {}
-    for dir in searchpath:
-        if dir is None:
-            continue
-        for dirname, dirnames, filenames in os.walk(dir):
-            for filename in filenames:
-                if (filename.endswith(".profile")):
-                    profile_name = re.sub('\.profile$', '', filename)
-                    if profile_name not in profiles:
-                        profile = yaml.load(open(dirname + filename))
-                        if (profile is not None):
-                            profile["file"] = dirname + filename
-                            profiles[profile_name] = profile
-    return profiles
-
-def print_list(list, text):
-    if list is None:
-        return
-    print('{:<7}{:<15}{:<25}'.format("", text, ""))
-    for l in list:
-        print('{:<7}{:<15}{:<25}'.format("", "", l))
-
-def print_profiles_detail(profiles_to_print):
-    profiles = get_profiles(evlist_search_path)
-    for p in profiles_to_print:
-        if p not in profiles:
-            print("Unknown profile: " + p)
-            print("")
-            continue
-        profile = profiles[p]
-        print("'" + p + "' profile detail:")
-        print('{:<7}{:<15}{:<25}'.format("", "File:", profile["file"]))
-        if "kernel" in profile:
-            print_list(profile["kernel"], "Kernel events:")
-        if "ust" in profile:
-            print_list(profile["ust"], "Userspace events:")
-        if "includes" in profile:
-            print_list(profile["includes"], "Included profiles:")
-            print("")
-            print("===== Included profiles details:")
-            print("")
-            print_profiles_detail(profile["includes"])
-            print("====")
-        print("")
 
 def check_sessiond():
     retcode = subprocess.call([LTTNG, "list"], stdout=open(os.devnull, 'wb'), stderr=open(os.devnull, 'wb'))
@@ -218,7 +127,7 @@ def stop_tracing(current_session):
 
 def do_trace(cmd, session, options):
     # Load the profile to determine whether to trace kernel or ust
-    profile = load_profiles(options.selected_profile.split(","))
+    profile = lttngProfiles.load_profiles(options.selected_profile.split(","))
     if (not profile["kernel"] and not profile["ust"] and not options.enable_all_events):
         logging.error("Nothing to trace!")
         return
@@ -244,11 +153,10 @@ def do_trace(cmd, session, options):
     # Step 2: enable required events
     add_context = False
     if (profile["kernel"] or options.enable_all_events):
-        if (options.enable_all_events):
-            cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "2048K", "--num-subbuf", "8"], True)
+        cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "2048K", "--num-subbuf", "8"], True)
+        if (options.enable_all_events):    
             cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k"], True)
         else:
-            cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
             evlist = profile["kernel"]
             logging.info("kernel event list: " + ", ".join(evlist))
             # enable pid/tid context if there is no sched_switch event
@@ -319,26 +227,11 @@ if __name__=="__main__":
     options = parser.parse_args()
 
     if (options.list_profiles):
-        print("Profile search paths: " + ", ".join(evlist_search_path))
-        print("")
-        profiles = get_profiles(evlist_search_path)
-        print("Available profiles:")
-        print("")
-        for p in profiles.keys():
-            try:
-                profile = profiles[p]
-                desc = ""
-                if "desc" in profile:
-                    desc = profile["desc"]
-                print('{:<7}{:<15}{:<25}'.format("", p, desc))
-                if "includes" in profile:
-                    print('{:<7}{:<15}{:<25}'.format("", "", "Includes profiles: " + ", ".join(profile["includes"])))
-            except Exception as e:
-                print("Error handling profile '" + p + "'")
+        lttngProfiles.print_profiles()
         sys.exit(0)
 
     if (options.list_profile):
-        print_profiles_detail(options.list_profile.split(","))
+        lttngProfiles.print_profiles_detail(options.list_profile.split(","))
         sys.exit(0)
 
     # try to create base directory if it doesn't exists
