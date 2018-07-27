@@ -154,7 +154,7 @@ def do_trace(cmd, session, options):
     add_context = False
     if (profile["kernel"] or options.enable_all_events):
         cmd_stub([LTTNG, "enable-channel", "k", "-k", "--subbuf-size", "2048K", "--num-subbuf", "8"], True)
-        if (options.enable_all_events):    
+        if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k"], True)
         else:
             evlist = profile["kernel"]
@@ -214,7 +214,7 @@ if __name__=="__main__":
 
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("-o", "--output", dest="output", help="Output base directory for traces", metavar="DIR", default=destdir)
-    parser.add_argument("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Default: kernel")
+    parser.add_argument("-p", "--enable-profile", dest="selected_profile", default=default_profile, help="The tracing profile to use to get the events to trace. Can be a comma-separated list of profiles. Profiles can be absolute path to profile file. Default: kernel")
     parser.add_argument("--list-profiles", dest="list_profiles", default=False, action="store_true", help="List event profiles")
     parser.add_argument("--list-profile", dest="list_profile", help="Get details on this profile")
     parser.add_argument("-a", "--all", dest="enable_all_events", default=False, action="store_true", help="Enable all events. This option has precedence over the selected profile")
