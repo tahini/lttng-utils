@@ -1,6 +1,15 @@
 # lttng-utils
 This repository contains helper scripts to record traces with LTTng for many common use cases.
 
+### Requirements
+
+This scripts requires the following packages to run:
+
+  * lttng
+  * python3
+  * python3-yaml
+  * python3-setuptools (for installation, not needed if running from directory)
+
 ### Install
 
 To install the helper script and profiles, run the setup script
