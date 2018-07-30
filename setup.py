@@ -74,6 +74,10 @@ setup(
         'lttng-record-trace'
     ],
 
+    install_requires=[
+        'pyyaml',
+    ],
+
     include_package_data = True
 
 )

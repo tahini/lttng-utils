@@ -58,3 +58,26 @@ More options are available for tracing. See the helper
 ```
 $ lttng-record-trace --help
 ```
+
+### Profiles
+
+LTTng-utils comes with a set of pre-defined profiles for common tracing use cases. Users can define their own profiles as well. The ``lttng-utils --list-profiles`` command will show the paths that are searched for profile, typically, the builtin script's path, ``$HOME/.lttng-utils/profiles/`` and a ``profiles/`` directory in the current directory. You can just create a new file named ``myprofile.profile`` in one of those directory and edit it. Profiles are yaml files with the following structure:
+
+```
+desc:
+    A description of the profile that will appear when listing profiles
+includes:
+    list of profiles to include in this one
+kernel:
+    list of kernel events to enable, 'syscall' being a special event to enable all syscalls
+ust:
+    list of userspace events to enable
+preload:
+    list of libraries to preload when running the application to trace
+```
+
+Then you can run the trace recording script with the profile like this:
+
+```
+$ lttng-record-trace -p myprofile
+```
