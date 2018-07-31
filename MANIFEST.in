@@ -1,2 +1,2 @@
 include README.md
-recursive-include lttngprofiles/profiles *
+recursive-include lttngutils/profiles *

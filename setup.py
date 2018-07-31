@@ -67,7 +67,7 @@ setup(
     keywords='lttng tracing',
 
     packages=[
-        'lttngprofiles',
+        'lttngutils',
         ],
 
     scripts=[
