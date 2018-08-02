@@ -8,3 +8,4 @@ includes:
     - statedump_k
 kernel:
     - syscall
+    - power_cpu_frequency
