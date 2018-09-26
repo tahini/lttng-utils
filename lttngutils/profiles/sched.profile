@@ -7,5 +7,6 @@ kernel:
     - sched_process_free
     - sched_switch
     - sched_wakeup
+    - sched_waking
     - sched_wakeup_new
     - sched_pi_setprio

@@ -1,2 +1,3 @@
 include README.md
+include lttng-record-trace
 recursive-include lttngutils/profiles *
