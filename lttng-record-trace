@@ -75,7 +75,11 @@ def cmd_stub(cmds, check, cmd_env=None, with_shell=False):
         retcode = subprocess.call(cmds, stdout=log_stream, stderr=log_stream, env=cmd_env)
         logging.debug("exit: " + str(retcode))
     else:
-        print(" ".join(cmds))
+        preload_lib = cmd_env.get("LD_PRELOAD", "")
+        preload_str = ""
+        if (preload_lib):
+            preload_str = "LD_PRELOAD=" + preload_lib + " "
+        print(preload_str + " ".join(cmds))
         print("")
     if (check and retcode != 0):
         cmd_stub([LTTNG,"destroy", current], False)
