@@ -6,6 +6,7 @@ includes:
     - network
     - timer
     - statedump_k
+    - disk
 kernel:
     - syscall
     - power_cpu_frequency
