@@ -33,7 +33,7 @@ import sys
 import re
 import subprocess
 import time
-from os.path import join
+from os.path import join, expanduser
 import logging
 import string
 from subprocess import CalledProcessError
@@ -60,8 +60,8 @@ original_sigint = signal.getsignal(signal.SIGINT)
 lttngProfiles = profile.Profile()
 
 default_profile = "kernel"
-evlist_search_path = [ os.path.join(os.getenv("PWD"), "profiles/"),
-                       os.path.join(os.getenv("HOME"), ".lttng-utils/profiles/"),
+evlist_search_path = [ os.path.join(os.getcwd(), "profiles/"),
+                       os.path.join(expanduser('~'), ".lttng-utils/profiles/"),
                        "/usr/local/share/lttng-utils/profiles/",
                        "/usr/share/lttng-utils/profiles/" ]
 
