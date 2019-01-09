@@ -29,8 +29,8 @@ class Profile:
 
     def __init__(self):
         self.searchpath = [ os.path.join(os.path.dirname(os.path.realpath(__file__)), "profiles/"),
-                os.path.join(os.getenv("HOME"), ".lttng-utils/profiles/"),
-                os.path.join(os.getenv("PWD"), "profiles/")]
+                os.path.join(os.path.expanduser('~'), ".lttng-utils/profiles/"),
+                os.path.join(os.getcwd(), "profiles/")]
 
     def _find_event_file(self, name):
         for dir in self.searchpath:
