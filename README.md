@@ -61,7 +61,7 @@ $ lttng-record-trace --help
 
 ### Profiles
 
-LTTng-utils comes with a set of pre-defined profiles for common tracing use cases. Users can define their own profiles as well. The ``lttng-utils --list-profiles`` command will show the paths that are searched for profile, typically, the builtin script's path, ``$HOME/.lttng-utils/profiles/`` and a ``profiles/`` directory in the current directory. You can just create a new file named ``myprofile.profile`` in one of those directory and edit it. Profiles are yaml files with the following structure:
+LTTng-utils comes with a set of pre-defined profiles for common tracing use cases. Users can define their own profiles as well. The ``lttng-record-trace --list-profiles`` command will show the paths that are searched for profile, typically, the builtin script's path, ``$HOME/.lttng-utils/profiles/`` and a ``profiles/`` directory in the current directory. You can just create a new file named ``myprofile.profile`` in one of those directory and edit it. Profiles are yaml files with the following structure:
 
 ```
 desc:
