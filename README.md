@@ -72,6 +72,8 @@ kernel:
     list of kernel events to enable, 'syscall' being a special event to enable all syscalls
 ust:
     list of userspace events to enable
+jul:
+    list of JUL events to enable
 preload:
     list of libraries to preload when running the application to trace
 ```

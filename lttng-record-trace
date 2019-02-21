@@ -113,7 +113,8 @@ def stop_tracing(current_session):
 def do_trace(cmd, session, options):
     # Load the profile to determine whether to trace kernel or ust
     profile = lttngProfiles.load_profiles(options.selected_profile.split(","))
-    if (not profile["kernel"] and not profile["ust"] and not options.enable_all_events):
+    if (not profile["kernel"] and not profile["ust"] and not profile["jul"] and
+            not options.enable_all_events):
         logging.error("Nothing to trace!")
         return
     if (profile["kernel"] or options.enable_all_events):
@@ -121,7 +122,7 @@ def do_trace(cmd, session, options):
         if (lttng.check_kernel_tracer() == False):
             sys.exit(1)
         session += "-k"
-    if (profile["ust"] or options.enable_all_events):
+    if (profile["ust"] or profile["jul"] or options.enable_all_events):
         # Check that the userspace tracer is available
         if (lttng.check_ust_tracer() == False):
             sys.exit(1)
@@ -160,13 +161,21 @@ def do_trace(cmd, session, options):
                 cmd_stub([LTTNG, "enable-event", "-c", "k", "-a", "-k", "--syscall"], False)
             if profile["kernel"]:
                 cmd_stub([LTTNG, "enable-event", "-c", "k", "-k", ",".join(evlist)], True)
-    if (profile["ust"] or options.enable_all_events):
+    if (profile["ust"] or profile["jul"] or options.enable_all_events):
         cmd_stub([LTTNG, "enable-channel", "u", "-u", "--subbuf-size", "1024K", "--num-subbuf", "8"], True)
         if (options.enable_all_events):
             cmd_stub([LTTNG, "enable-event", "-c", "u", "-a", "-u"], True)
         else:
-            logging.info("userspace event list: " + ", ".join(profile["ust"]))
-            cmd_stub([LTTNG, "enable-event", "-c", "u", "-u", ",".join(profile["ust"])], True)
+            if profile["ust"]:
+                logging.info("userspace event list: " +
+                             ", ".join(profile["ust"]))
+                cmd_stub([LTTNG, "enable-event", "-c", "u", "-u",
+                          ",".join(profile["ust"])], True)
+            if profile["jul"]:
+                logging.info("JUL event list: " +
+                             ", ".join(profile["jul"]))
+                cmd_stub([LTTNG, "enable-event", "-c", "u", "--jul",
+                          ",".join(profile["jul"])], True)
         # enable pid/tid context if there is no sched_switch event
         if not profile["kernel"] or add_context:
             cmd_stub([LTTNG, "add-context", "-c", "u", "-u", "-t", "vpid", "-t", "vtid"], True)
