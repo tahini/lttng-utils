@@ -56,6 +56,8 @@ class Profile:
         profile = yaml.load(open(evfile))
         if "ust" not in profile:
             profile["ust"] = []
+        if "jul" not in profile:
+            profile["jul"] = []
         if "kernel" not in profile:
             profile["kernel"] = []
         if "preload" not in profile:
@@ -65,11 +67,12 @@ class Profile:
             subLists = self.load_profiles(profile["includes"])
             self._merge_event_list(profile["kernel"], subLists["kernel"])
             self._merge_event_list(profile["ust"], subLists["ust"])
+            self._merge_event_list(profile["jul"], subLists["jul"])
             self._merge_event_list(profile["preload"], subLists["preload"])
         return profile
 
     def load_profiles(self, names):
-        evLists = { "kernel": [], "ust": [], "preload": [] }
+        evLists = { "kernel": [], "ust": [], "jul": [], "preload": [] }
         for name in names:
             profile = self._load_profile(name)
             if profile is None:
@@ -77,6 +80,7 @@ class Profile:
                 continue;
             self._merge_event_list(evLists["kernel"], profile["kernel"])
             self._merge_event_list(evLists["ust"], profile["ust"])
+            self._merge_event_list(evLists["jul"], profile["jul"])
             self._merge_event_list(evLists["preload"], profile["preload"])
         return evLists
 
@@ -136,6 +140,8 @@ class Profile:
                 self._print_list(profile["kernel"], "Kernel events:")
             if "ust" in profile:
                 self._print_list(profile["ust"], "Userspace events:")
+            if "jul" in profile:
+                self._print_list(profile["jul"], "JUL events:")
             if "includes" in profile:
                 self._print_list(profile["includes"], "Included profiles:")
                 print("")
