@@ -61,7 +61,30 @@ $ lttng-record-trace --help
 
 ### Profiles
 
-LTTng-utils comes with a set of pre-defined profiles for common tracing use cases. Users can define their own profiles as well. The ``lttng-record-trace --list-profiles`` command will show the paths that are searched for profile, typically, the builtin script's path, ``$HOME/.lttng-utils/profiles/`` and a ``profiles/`` directory in the current directory. You can just create a new file named ``myprofile.profile`` in one of those directory and edit it. Profiles are yaml files with the following structure:
+LTTng-utils comes with a set of pre-defined profiles for common tracing use cases. Users can define their own profiles as well. The ``lttng-record-trace --list-profiles`` command will show the paths that are searched for profile, typically, the builtin script's path, ``$HOME/.lttng-utils/profiles/`` and a ``profiles/`` directory in the current directory.
+
+Here is the output of the ``lttng-record-trace --list-profiles`` command for the builtin profiles:
+
+```
+Available profiles:
+
+       timer          The kernel timer events  
+       network        The kernel network events
+       sched          The scheduler events of the kernel
+       mm             The page allocation events of the kernel (they are very numerous)
+       kernel         A subset of kernel events sufficient and necessary to make most Trace Compass analyses
+                      Includes profiles: sched, interrupt, network, timer, statedump_k, disk
+       cyg_profile    Enable function entry and exit tracepoints for a -finstrument-functions compiled application
+       statedump_k    The lttng kernel statedump events
+       interrupt      The kernel events for interrupts and software interrupts
+       disk           The kernel events for disk analysis
+       libc           Enable the lttng UST libc wrapper
+       cyg_profile_fast Enable fast function entry and exit tracepoints for a -finstrument-functions compiled application
+```
+
+For example, to test an application instrumented with the ``-finstrument-functions`` compiler flag, you can run ``lttng-record-trace -p cyg_profile ./myapp`` or ``lttng-record-trace -p cyg-profile,kernel ./myapp`` to trace the system along with the application.
+
+To add your own profile, you can create a new file named ``myprofile.profile`` in one of those directory mentioned above and edit it. Profiles are yaml files with the following structure:
 
 ```
 desc:
