@@ -53,7 +53,7 @@ class Profile:
         if (evfile is None):
             logging.warning("tracing profile " + name + " not found")
             return None
-        profile = yaml.load(open(evfile))
+        profile = yaml.safe_load(open(evfile))
         if "ust" not in profile:
             profile["ust"] = []
         if "jul" not in profile:
@@ -94,7 +94,7 @@ class Profile:
                     if (filename.endswith(".profile")):
                         profile_name = re.sub('\.profile$', '', filename)
                         if profile_name not in profiles:
-                            profile = yaml.load(open(dirname + filename))
+                            profile = yaml.safe_load(open(dirname + filename))
                             if (profile is not None):
                                 profile["file"] = dirname + filename
                                 profiles[profile_name] = profile
