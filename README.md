@@ -36,7 +36,7 @@ To install LTTng utils directly from the git repository
 3. Use ``pip3`` to install LTTng analyses:
 
 ```
-$ sudo pip3 install --upgrade git+git://github.com/tahini/lttng-utils.git@master
+$ sudo pip3 install --upgrade git+https://github.com/tahini/lttng-utils.git@master
 ```
 
 ### Usage
